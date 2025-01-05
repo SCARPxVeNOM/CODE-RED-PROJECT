@@ -1,28 +1,98 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { formatEther } from "ethers";
 import axios from "axios";
 
-const ETHERSCAN_API_KEY = "I99PP9U5SKZAGSDSNH8DBWCBS53QD4JA42"; // Replace with your key
-const FIXED_WALLET_ADDRESS = "0xC4809BAaF5fd1fb97e614A2e9c017609862598AD"; // Replace with the wallet address you want to track
+const ETHERSCAN_API_KEY = "I99PP9U5SKZAGSDSNH8DBWCBS53QD4JA42"; // Replace with your API key
+const FIXED_WALLET_ADDRESS = "0xc4809baaf5fd1fb97e614a2e9c017609862598ad"; // Replace with a wallet address
+const ADDRESS_MAPPING = {
+  "0xc4809baaf5fd1fb97e614a2e9c017609862598ad": "Ministry of Finance",
+  "0x60b49a21e3df8a52dc77decfff6bb811d1a6b962": "Education Ministry",
+};
 
 function App() {
-  const [walletAddress, setWalletAddress] = useState("Wallet address will appear here");
   const [transactions, setTransactions] = useState([]);
+  const [walletAddress, setWalletAddress] = useState("");
+  const [walletBalance, setWalletBalance] = useState("");
 
-  useEffect(() => {
-    fetchTransactions(FIXED_WALLET_ADDRESS); // Fetch transactions for the fixed wallet on load
-    getCurrentWalletConnected();
-    addWalletListener();
+  // Memoized fetchTransactions to avoid unnecessary re-creation
+  const fetchTransactions = useCallback(async (address) => {
+    try {
+      const response = await axios.get(
+        `https://api-sepolia.etherscan.io/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=asc&apikey=${ETHERSCAN_API_KEY}`
+      );
+
+      if (response.data.status === "1") {
+        const sortedTransactions = response.data.result.sort(
+          (a, b) => b.timeStamp - a.timeStamp
+        );
+
+        if (
+          sortedTransactions.length !== transactions.length ||
+          sortedTransactions[0]?.hash !== transactions[0]?.hash
+        ) {
+          setTransactions(sortedTransactions);
+        }
+      } else {
+        console.log("No transactions found or API error:", response.data.message);
+      }
+    } catch (err) {
+      console.error("Error fetching transactions:", err);
+    }
+  }, [transactions]);
+
+  const fetchWalletBalance = useCallback(async (address) => {
+    try {
+      if (typeof window.ethereum !== "undefined") {
+        const balance = await window.ethereum.request({
+          method: "eth_getBalance",
+          params: [address, "latest"],
+        });
+        setWalletBalance(parseFloat(parseInt(balance, 16) / 10 ** 18).toFixed(4)); // Convert Wei to Ether
+      } else {
+        console.log("MetaMask is not installed");
+      }
+    } catch (err) {
+      console.error("Error fetching wallet balance:", err);
+    }
   }, []);
 
+  useEffect(() => {
+    fetchTransactions(FIXED_WALLET_ADDRESS);
+    getCurrentWalletConnected();
+    addWalletListener();
+  }, [fetchTransactions]);
+
+  useEffect(() => {
+    const updateBalance = () => fetchWalletBalance(FIXED_WALLET_ADDRESS);
+    updateBalance(); // Fetch immediately
+    const intervalId = setInterval(updateBalance, 5000); // Fetch every 5 seconds
+
+    return () => clearInterval(intervalId); // Cleanup interval on unmount
+  }, [fetchWalletBalance]);
+
+  useEffect(() => {
+    const updateTransactions = () => fetchTransactions(FIXED_WALLET_ADDRESS);
+    updateTransactions(); // Fetch immediately
+    const intervalId = setInterval(updateTransactions, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(intervalId); // Cleanup interval on unmount
+  }, [fetchTransactions]);
+
+  const formatAddress = (address) => {
+    const lowerCaseAddress = address.toLowerCase();
+    return ADDRESS_MAPPING[lowerCaseAddress] || address;
+  };
+
   const connectWallet = async () => {
-    if (window.ethereum) {
+    if (typeof window !== "undefined" && typeof window.ethereum !== "undefined") {
       try {
-        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const accounts = await window.ethereum.request({
+          method: "eth_requestAccounts",
+        });
         setWalletAddress(accounts[0]);
-        console.log(accounts[0]);
+        console.log("Connected wallet:", accounts[0]);
       } catch (err) {
-        console.error(err.message);
+        console.error("Error connecting wallet:", err.message);
       }
     } else {
       console.log("Please install MetaMask");
@@ -30,122 +100,108 @@ function App() {
   };
 
   const getCurrentWalletConnected = async () => {
-    if (window.ethereum) {
+    if (typeof window !== "undefined" && typeof window.ethereum !== "undefined") {
       try {
-        const accounts = await window.ethereum.request({ method: "eth_accounts" });
+        const accounts = await window.ethereum.request({
+          method: "eth_accounts",
+        });
         if (accounts.length > 0) {
           setWalletAddress(accounts[0]);
+          console.log("Current wallet connected:", accounts[0]);
         } else {
-          console.log("Connect to MetaMask using the Connect button");
+          console.log("No wallet connected. Use the Connect Wallet button.");
         }
       } catch (err) {
-        console.error(err.message);
+        console.error("Error checking current wallet:", err.message);
       }
     } else {
       console.log("Please install MetaMask");
     }
   };
 
-  const addWalletListener = async () => {
-    if (window.ethereum) {
+  const addWalletListener = () => {
+    if (typeof window !== "undefined" && typeof window.ethereum !== "undefined") {
       window.ethereum.on("accountsChanged", (accounts) => {
-        setWalletAddress(accounts[0]);
+        if (accounts.length > 0) {
+          setWalletAddress(accounts[0]);
+          console.log("Wallet changed:", accounts[0]);
+        } else {
+          setWalletAddress("");
+          console.log("No wallet connected");
+        }
       });
-    }
-  };
-
-  const fetchTransactions = async (address) => {
-    try {
-      const response = await axios.get(
-        `https://api-sepolia.etherscan.io/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=asc&apikey=${ETHERSCAN_API_KEY}`
-      );
-      if (response.data.status === "1") {
-        setTransactions(response.data.result);
-      } else {
-        console.log("No transactions found or error in API call");
-      }
-    } catch (err) {
-      console.error("Error fetching transactions:", err);
+    } else {
+      console.log("MetaMask is not installed");
     }
   };
 
   return (
     <div
-      className="flex items-center justify-center min-h-screen"
+      className="relative flex flex-col items-center min-h-screen"
       style={{
-        backgroundColor: "#1a1a1a",
-        color: "#ffffff",
+        backgroundColor: "#f5f5f5",
+        color: "#333333",
         fontFamily: "'Arial', sans-serif",
       }}
     >
-      <div className="text-center">
-        <div className="mb-8">
-          <h1 className="text-6xl font-light text-gray-300">Ministry</h1>
-          <h2 className="text-4xl font-light text-white">of Finance</h2>
+      <header className="w-full py-6 px-6 shadow-md bg-gray-200">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold uppercase tracking-widest" style={{ letterSpacing: "2px" }}>
+            Ministry of Finance
+          </h1>
+          <p className="mt-2 text-lg font-medium">ADDRESS: {FIXED_WALLET_ADDRESS}</p>
         </div>
-        <div className="flex flex-col items-center">
-          <button
-            onClick={connectWallet}
-            className="px-6 py-3 mb-4 text-lg font-medium text-white bg-gray-700 rounded-full shadow-lg hover:bg-gray-600 focus:outline-none"
-          >
-            <span className="is-link has-text-weight-bold">
-              {walletAddress && walletAddress.length > 0
-                ? `Connected: ${walletAddress.substring(0, 6)}...${walletAddress.substring(38)}`
-                : "Connect Wallet"}
-            </span>
-          </button>
-          <p className="text-sm text-gray-400">{walletAddress}</p>
-        </div>
+        <p>Balance: {walletBalance} ETH</p>
+        <button
+          onClick={connectWallet}
+          className="absolute top-6 right-6 px-6 py-2 text-white bg-blue-500 rounded-full shadow-lg hover:bg-blue-400 focus:outline-none"
+        >
+          {walletAddress && walletAddress.length > 0
+            ? `Connected: ${walletAddress.substring(0, 6)}...${walletAddress.substring(
+                38
+              )}`
+            : "Connect Wallet"}
+        </button>
+      </header>
 
-        {/* Transactions Section */}
-        <div className="mt-8">
-          <h3 className="text-2xl text-white mb-4">Transactions</h3>
+      <div className="w-full max-w-7xl mt-6 px-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-gray-200 py-6 px-4 shadow-md rounded-md">
           {transactions.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table
-                className="table-auto w-full text-left border-collapse border border-gray-700"
-                style={{ backgroundColor: "#2c2c2c", color: "#ffffff" }}
+            transactions.map((tx) => (
+              <div
+                key={tx.hash}
+                className="bg-white p-4 shadow-md rounded-md border border-gray-300"
               >
-                <thead>
-                  <tr className="bg-gray-800">
-                    <th className="py-2 px-4 border border-gray-700">Hash</th>
-                    <th className="py-2 px-4 border border-gray-700">From</th>
-                    <th className="py-2 px-4 border border-gray-700">To</th>
-                    <th className="py-2 px-4 border border-gray-700">Amount (ETH)</th>
-                    <th className="py-2 px-4 border border-gray-700">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map((tx, index) => (
-                    <tr
-                      key={tx.hash}
-                      className={index % 2 === 0 ? "bg-gray-700" : "bg-gray-600"}
-                    >
-                      <td className="py-2 px-4 border border-gray-700">
-                        <a
-                          href={`https://sepolia.etherscan.io/tx/${tx.hash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 underline"
-                        >
-                          {tx.hash.substring(0, 10)}...
-                        </a>
-                      </td>
-                      <td className="py-2 px-4 border border-gray-700">{tx.from}</td>
-                      <td className="py-2 px-4 border border-gray-700">{tx.to}</td>
-                      <td className="py-2 px-4 border border-gray-700">
-                        {formatEther(tx.value)} ETH
-                      </td>
-                      <td className="py-2 px-4 border border-gray-700">
-                        {new Date(tx.timeStamp * 1000).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                <p className="text-sm font-semibold">
+                  <strong>Transaction Hash:</strong>{" "}
+                  <a
+                    href={`https://sepolia.etherscan.io/tx/${tx.hash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 underline"
+                  >
+                    {tx.hash.substring(0, 10)}...
+                  </a>
+                </p>
+                <p className="text-sm">
+                  <strong>From:</strong> {formatAddress(tx.from)}
+                </p>
+                <p className="text-sm">
+                  <strong>To:</strong> {formatAddress(tx.to)}
+                </p>
+                <p className="text-sm">
+                  <strong>Amount:</strong> {formatEther(tx.value)} ETH
+                </p>
+                <p className="text-sm">
+                  <strong>Timestamp:</strong>{" "}
+                  {new Date(tx.timeStamp * 1000).toLocaleString()}
+                </p>
+              </div>
+            ))
           ) : (
-            <p className="text-gray-400">No transactions found</p>
+            <p className="text-gray-500 text-center col-span-3">
+              No transactions found.
+            </p>
           )}
         </div>
       </div>
