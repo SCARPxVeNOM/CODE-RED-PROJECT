@@ -1,3 +1,13 @@
+/* App.css */
+.transaction-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.transaction-card:hover {
+  transform: scale(1.05); /* Zoom in */
+  box-shadow: 0 10px 20px rgba(20, 1, 1, 0.15); /* Enhanced shadow */
+}
+
 .App {
   text-align: center;
 }
@@ -14,7 +24,7 @@
 }
 
 .App-header {
-  background-color: #fafbfd;
+  background-color: #f6f7fb;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -36,3 +46,4 @@
     transform: rotate(360deg);
   }
 }
+
