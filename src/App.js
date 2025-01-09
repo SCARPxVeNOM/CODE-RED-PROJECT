@@ -6,10 +6,12 @@ import axios from "axios";
 import './App.css'; // Import CSS for hover effects
 
 const ETHERSCAN_API_KEY = "I99PP9U5SKZAGSDSNH8DBWCBS53QD4JA42";
-const FIXED_WALLET_ADDRESS = "0xc4809baaf5fd1fb97e614a2e9c017609862598ad";
+const FIXED_WALLET_ADDRESS = "0x4affc319a3c6cef3094611f833055bda51521848";
 const ADDRESS_MAPPING = {
-  "0xc4809baaf5fd1fb97e614a2e9c017609862598ad": "Ministry of Finance",
-  "0x60b49a21e3df8a52dc77decfff6bb811d1a6b962": "Education Ministry",
+  "0x4affc319a3c6cef3094611f833055bda51521848": "Ministry of Finance",
+  "0x6dc5ae8e77091a0709a2502de9568218f1fca49e": "Ministry of Education",
+  "0x9e6a93bf61922c86a78a918c016052311416f07f": "Ministry of Health",
+  "0xc4809baaf5fd1fb97e614a2e9c017609862598ad": "Reserve Bank of India"
 };
 
 function App() {
@@ -94,7 +96,9 @@ function App() {
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
+          width: '1400px',
           height: '400px',
+
         }}
       >
         <div className="container mx-auto flex flex-col items-center justify-center text-center">
